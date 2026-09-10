@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2020", "module": "ESNext", "moduleResolution": "bundler",
+    "lib": ["ES2020"], "types": ["@dcl/posix", "@dcl/js-runtime"],
+    "strict": true, "skipLibCheck": true, "allowJs": true,
+    "allowSyntheticDefaultImports": true, "experimentalDecorators": true,
+    "jsx": "react", "jsxFactory": "ReactEcs.createElement", "noEmit": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "sdk6-compat-adapter",
+  "version": "0.4.3",
+  "description": "SDK6 scene compatibility layer for SDK7 explorers",
+  "scripts": {
+    "build": "node build.cjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node test/run.cjs",
+    "format": "prettier --write src assets *.cjs test/*.cjs",
+    "package": "node package.cjs"
+  },
+  "devDependencies": {
+    "@dcl/js-runtime": "7.27.0",
+    "@dcl/posix": "1.0.4",
+    "@dcl/sdk": "file:vendor/sdk-runtime.tgz",
+    "@types/text-encoding": "0.0.36",
+    "esbuild": "0.18.20",
+    "pngjs": "5.0.0",
+    "prettier": "3.0.3",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "prettier": {
+    "semi": false,
+    "singleQuote": true,
+    "printWidth": 120,
+    "trailingComma": "none"
+  },
+  "dependencies": {
+    "formdata-polyfill": "4.0.10",
+    "text-encoding": "0.7.0"
+  },
+  "private": true
+}
