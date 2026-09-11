@@ -17,11 +17,17 @@ export function invalidateTextLayout(shape: ECS6ComponentUiShape): void {
   textParentSizes.delete(shape)
 }
 
+/** The legacy CanvasGroup rule: a shape receives and blocks pointer events only while it and every ancestor are visible and pointer blockers. */
+export function blocksPointer(uiShape: ECS6ComponentUiShape, ancestorsBlock = true): boolean {
+  return ancestorsBlock && uiShape.visible !== false && uiShape.isPointerBlocker !== false
+}
+
 export function computeTransform(
   uiShape: ECS6ComponentUiShape,
   parentSize: Vector2,
   zoom: number,
-  stack?: StackContext
+  stack?: StackContext,
+  blocks = blocksPointer(uiShape)
 ): [UiTransformProps, Vector2] {
   const size = computedVector2FromUiValue(
     uiShape.width,
@@ -66,7 +72,8 @@ export function computeTransform(
       },
       width: (size.x >= 0 ? size.x : 0) * zoom,
       height: (size.y >= 0 ? size.y : 0) * zoom,
-      opacity: uiShape.opacity ?? 1.0
+      opacity: uiShape.opacity ?? 1.0,
+      pointerFilter: blocks ? 'block' : 'none'
     },
     size
   ]

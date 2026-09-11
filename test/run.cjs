@@ -3,7 +3,7 @@ const path = require('node:path')
 const crypto = require('node:crypto')
 const { spawnSync } = require('node:child_process')
 const root = path.resolve(__dirname, '..')
-const suite = ['regression', 'combinations', 'latest-sdk6', 'ui-layout', 'ui-resources', 'xhr', 'security', 'module-shims', 'social-controller', 'sound-controller', 'minified']
+const suite = ['regression', 'combinations', 'latest-sdk6', 'ui-layout', 'ui-resources', 'xhr', 'security', 'module-shims', 'social-controller', 'sound-controller', 'text-shape', 'text-empty-value', 'player-events', 'unknown-module', 'ui-orphan', 'ui-fields', 'ui-clicks', 'minified']
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')
 function inputs() {
   const files = ['package.json', 'package-lock.json', 'build.cjs', 'package.cjs', '.github/workflows/build.yml', 'test/run.cjs', 'test/verify.cjs', 'assets/glyph-atlas.cjs']

@@ -284,8 +284,8 @@ async function io() {
   await test('prototype-names-are-not-rpc-modules', async () => {
     const h = await boot(bundle)
     for (const name of ['constructor', '__proto__', 'toString']) {
-      const m = await h.dcl.loadModule(name)
-      assert.equal(m.methods.length, 0)
+      await assert.rejects(() => h.dcl.loadModule(name), /The module is not available in the list!/)
+      assert.equal(name in h.state.loadedModules, false)
       await assert.rejects(() => h.dcl.callRpc(name, 'constructor', []))
     }
   })

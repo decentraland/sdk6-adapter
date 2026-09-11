@@ -25,6 +25,7 @@ import { type AdaptationLayerState } from './../types'
 import { engine } from '@dcl/ecs'
 import { ReactEcsRenderer } from '@dcl/react-ecs'
 import { renderEcs6Ui } from '../components-bridge/commons/ui/core'
+import { installUiListenerCleanup } from '../components-bridge/commons/ui/events'
 import { CameraType } from '@dcl/sdk/ecs'
 import { logMiddleware } from './LogMiddleware'
 import { openExternalUrl, openNftDialog } from '~system/RestrictedActions'
@@ -256,6 +257,7 @@ function start(): void {
 export function createAdaptionLayer(): AdaptionLayerType {
   bridgeObservables(state)
 
+  installUiListenerCleanup()
   ReactEcsRenderer.setUiRenderer(renderEcs6Ui(state), { virtualWidth: 0, virtualHeight: 0 })
   engine.addSystem(onLegacyUpdate)
 

@@ -256,8 +256,10 @@ async function main() {
       )
     })
     await test('unknown-module-and-method', async (h) => {
-      const m = await h.dcl.loadModule('UnknownFixtureModule')
-      assert.equal(m.methods.length, 0)
+      // Unknown names reject like the legacy runtime and are never cached, so
+      // an RPC on the same handle rejects too.
+      await assert.rejects(() => h.dcl.loadModule('UnknownFixtureModule'), /The module is not available in the list!/)
+      assert.equal('UnknownFixtureModule' in h.state.loadedModules, false)
       await assert.rejects(() => h.dcl.callRpc('UnknownFixtureModule', 'missing', []))
     })
     async function incomingComponent(h, entity, id, value) {

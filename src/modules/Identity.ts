@@ -1,4 +1,5 @@
 import { getUserData } from '~system/UserIdentity'
+import { trackIdentityCall } from '../events/observables'
 
 import { toUserData } from './userData'
 
@@ -15,7 +16,7 @@ export function create(): Record<string, any> {
   }
 
   return {
-    getUserPublicKey,
-    getUserData: internalGetUserData
+    getUserPublicKey: () => trackIdentityCall(getUserPublicKey()),
+    getUserData: () => trackIdentityCall(internalGetUserData())
   }
 }

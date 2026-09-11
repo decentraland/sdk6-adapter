@@ -13,7 +13,7 @@ import {
 import { ECS6_CLASS_ID, type AdaptationLayerState } from '../../../types'
 import { convertFont, convertTexture } from '../utils'
 import { type ComponentNode } from './core'
-import { computeTransform, textParentSize } from './layout'
+import { blocksPointer, computeTransform, textParentSize } from './layout'
 import { convertUiFontFromFont, textAlignFromHV } from './uiText'
 
 import { getClickHandler, sendUiEvent } from './events'
@@ -54,12 +54,12 @@ function glyphElements(c: ComponentNode, size: Vector2, zoom: number): JSX.Eleme
   const layout =
     !text.font &&
     layoutGlyphText(
-      `${text.value}`,
+      `${text.value ?? ''}`,
       size.x,
       size.y,
-      text.fontSize ?? 10,
+      Math.trunc(text.fontSize ?? 10),
       zoom,
-      text.textWrapping !== false,
+      text.textWrapping !== false && text.fontAutoSize !== true,
       text.hTextAlign,
       text.vTextAlign
     )
@@ -96,27 +96,35 @@ export function Ecs6UiComponent(
   c: ComponentNode,
   parentSize: Vector2,
   zoom: number,
-  stack?: StackContext
+  stack?: StackContext,
+  ancestorsBlock = true
 ): JSX.Element {
+  const blocks = blocksPointer(c.value, ancestorsBlock)
   switch (c.classId) {
     case ECS6_CLASS_ID.UI_BUTTON_SHAPE:
-      return renderUiButton(state, c, parentSize, zoom, stack)
+      return renderUiButton(state, c, parentSize, zoom, stack, blocks)
     case ECS6_CLASS_ID.UI_SLIDER_SHAPE:
-      return renderUiScrollRect(state, c, parentSize, zoom, stack)
+      return renderUiScrollRect(state, c, parentSize, zoom, stack, blocks)
     case ECS6_CLASS_ID.UI_CONTAINER_RECT: {
-      const [uiTransform, size] = computeTransform(c.value, parentSize, zoom, stack)
+      const [uiTransform, size] = computeTransform(c.value, parentSize, zoom, stack, blocks)
       const container = c.value as ECS6ComponentUiContainerRect
       const color = uiColor(container.color)
+      // The legacy renderer drew a thickness-wide Outline effect in its default half-transparent black.
+      const thickness = container.thickness ?? 0
+      if (thickness > 0) {
+        uiTransform.borderWidth = thickness * zoom
+        uiTransform.borderColor = Color4.create(0, 0, 0, 0.5)
+      }
 
       return (
         <UiEntity key={'w' + c.__id} uiTransform={uiTransform} uiBackground={{ color }}>
-          {c.children.map(($) => Ecs6UiComponent(state, $, size, zoom))}
+          {c.children.map(($) => Ecs6UiComponent(state, $, size, zoom, undefined, blocks))}
         </UiEntity>
       )
     }
 
     case ECS6_CLASS_ID.UI_CONTAINER_STACK: {
-      const [, size] = computeTransform(c.value, parentSize, zoom, stack)
+      const [, size] = computeTransform(c.value, parentSize, zoom, stack, blocks)
       const container = c.value as ECS6ComponentUiContainerStack
 
       const color = uiColor(container.color)
@@ -149,111 +157,110 @@ export function Ecs6UiComponent(
         else totalSize.x -= spacing
       }
 
-      if (container.adaptWidth === true) {
+      if (container.adaptWidth !== false) {
         c.value.width = {
           type: 1,
           value: totalSize.x
         }
       }
 
-      if (container.adaptHeight === true) {
+      if (container.adaptHeight !== false) {
         c.value.height = {
           type: 1,
           value: totalSize.y
         }
       }
 
-      const [realUiTransform] = computeTransform(c.value, parentSize, zoom, stack)
+      const [realUiTransform] = computeTransform(c.value, parentSize, zoom, stack, blocks)
 
       const stackOrientation = container.stackOrientation ?? 0
       return (
         <UiEntity key={'w' + c.__id} uiTransform={realUiTransform} uiBackground={{ color }}>
           {c.children.map(($, index) => {
-            return Ecs6UiComponent(state, $, size, zoom, {
-              offset: {
-                x: stackOrientation === 1 ? positions[index] : 0,
-                y: stackOrientation === 0 ? positions[index] : 0
-              }
-            })
+            return Ecs6UiComponent(
+              state,
+              $,
+              size,
+              zoom,
+              {
+                offset: {
+                  x: stackOrientation === 1 ? positions[index] : 0,
+                  y: stackOrientation === 0 ? positions[index] : 0
+                }
+              },
+              blocks
+            )
           })}
         </UiEntity>
       )
     }
 
     case ECS6_CLASS_ID.UI_IMAGE_SHAPE: {
-      const [uiTransform, size] = computeTransform(c.value, parentSize, zoom, stack)
+      const [uiTransform, size] = computeTransform(c.value, parentSize, zoom, stack, blocks)
       const imageValue = c.value as ECS6ComponentUiImage
       const texture = convertTexture(state, imageValue.source ?? '')
 
       let uiBackground: UiBackgroundProps = {}
       if (texture?.tex?.$case === 'texture') {
-        uiBackground = {
-          texture: { src: texture.tex.texture.src },
-          textureMode: 'stretch'
-        }
-
-        if (imageValue.sizeInPixels === true) {
-          const src = texture.tex.texture.src
-          if (!textureSizes.has(src)) {
-            textureSizes.set(src, null)
-
-            // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-            if (getTextureSize) {
-              getTextureSize({ src: src })
-                .then((data) => {
-                  textureSizes.set(src, {
-                    x: data.size.width,
-                    y: data.size.height
-                  })
-                })
-                .catch((e) => {
-                  console.error('Error getting texture size', e)
-                })
-            }
-          } else {
-            const size = textureSizes.get(src) ?? { x: 1, y: 1 }
-            if (size.x === 0) size.x = 1
-            if (size.y === 0) size.y = 1
-
-            const sX = imageValue.sourceLeft ?? 0
-            const sY = imageValue.sourceTop ?? 0
-            const sW = imageValue.sourceWidth ?? size.x
-            const sH = imageValue.sourceHeight ?? size.y
-            const uvLeft = sX / size.x
-            const uvTop = 1 - sY / size.y
-            const uvRight = (sX + sW) / size.x
-            const uvBottom = 1 - (sY + sH) / size.y
-
-            uiBackground.uvs = [uvLeft, uvBottom, uvLeft, uvTop, uvRight, uvTop, uvRight, uvBottom]
+        const src = texture.tex.texture.src
+        uiBackground = { texture: { src }, textureMode: 'stretch' }
+        if (!textureSizes.has(src)) {
+          textureSizes.set(src, null)
+          // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+          if (getTextureSize) {
+            getTextureSize({ src })
+              .then((data) => {
+                textureSizes.set(src, { x: data.size.width, y: data.size.height })
+              })
+              .catch((e) => {
+                console.error('Error getting texture size', e)
+              })
           }
-        } else {
-          uiBackground.uvs = []
+        }
+        // The legacy renderer cropped to the source rect whenever the texture was loaded; without
+        // the texture size the whole texture shows. With sizeInPixels false the source values are
+        // fractions of the parent rect, which the legacy renderer multiplied in before dividing by
+        // the texture size.
+        const size = textureSizes.get(src)
+        if (size && size.x > 0 && size.y > 0) {
+          const kx = imageValue.sizeInPixels === false ? parentSize.x : 1
+          const ky = imageValue.sizeInPixels === false ? parentSize.y : 1
+          const sX = (imageValue.sourceLeft ?? 0) * kx
+          const sY = (imageValue.sourceTop ?? 0) * ky
+          const sW = imageValue.sourceWidth === undefined ? size.x : imageValue.sourceWidth * kx
+          const sH = imageValue.sourceHeight === undefined ? size.y : imageValue.sourceHeight * ky
+          const uvLeft = sX / size.x
+          const uvTop = 1 - sY / size.y
+          const uvRight = (sX + sW) / size.x
+          const uvBottom = 1 - (sY + sH) / size.y
+          uiBackground.uvs = [uvLeft, uvBottom, uvLeft, uvTop, uvRight, uvTop, uvRight, uvBottom]
         }
       }
 
-      const onMouseDown = getClickHandler(state, imageValue.onClick)
+      const onMouseDown = blocks ? getClickHandler(state, imageValue.onClick) : undefined
       return (
         <UiEntity key={'w' + c.__id} uiTransform={uiTransform} uiBackground={uiBackground} onMouseDown={onMouseDown}>
-          {c.children.map(($) => Ecs6UiComponent(state, $, size, zoom))}
+          {c.children.map(($) => Ecs6UiComponent(state, $, size, zoom, undefined, blocks))}
         </UiEntity>
       )
     }
 
     case ECS6_CLASS_ID.UI_TEXT_SHAPE: {
-      const [uiTransform, size] = computeTransform(c.value, textParentSize(c.value, parentSize), zoom, stack)
+      const [uiTransform, size] = computeTransform(c.value, textParentSize(c.value, parentSize), zoom, stack, blocks)
       const textValue = c.value as ECS6ComponentUiText
 
       if (textValue.textWrapping === true) {
         uiTransform.flexWrap = 'wrap'
       }
 
-      const textWrap = textValue.textWrapping === undefined || textValue.textWrapping ? 'wrap' : 'nowrap'
+      // The legacy renderer disabled word wrapping while auto-sizing the font.
+      const textWrap = textValue.textWrapping !== false && textValue.fontAutoSize !== true ? 'wrap' : 'nowrap'
       const glyphs = glyphElements(c, size, zoom)
       if (glyphs)
         return (
           <UiEntity key={'w' + c.__id} uiTransform={uiTransform}>
             {glyphs}
-            {c.children.map(($) => Ecs6UiComponent(state, $, size, zoom))}
+            {c.children.map(($) => Ecs6UiComponent(state, $, size, zoom, undefined, blocks))}
           </UiEntity>
         )
 
@@ -263,37 +270,48 @@ export function Ecs6UiComponent(
           uiTransform={uiTransform}
           uiText={{
             textAlign: textAlignFromHV(textValue.hTextAlign, textValue.vTextAlign),
-            fontSize: (textValue.fontSize ?? 10) * zoom,
+            fontSize: Math.trunc(textValue.fontSize ?? 10) * zoom,
             font: convertUiFontFromFont(convertFont(state, textValue.font)),
-            value: `${textValue.value}`,
+            value: `${textValue.value ?? ''}`,
             color: uiColor(textValue.color),
             textWrap
           }}
         >
-          {c.children.map(($) => Ecs6UiComponent(state, $, size, zoom))}
+          {c.children.map(($) => Ecs6UiComponent(state, $, size, zoom, undefined, blocks))}
         </UiEntity>
       )
     }
 
     case ECS6_CLASS_ID.UI_INPUT_TEXT_SHAPE: {
-      const [uiTransform, size] = computeTransform(c.value, parentSize, zoom, stack)
+      const [uiTransform] = computeTransform(c.value, parentSize, zoom, stack, blocks)
       const value = c.value as any
+      // The legacy input coloured its text and placeholder with placeholderColor (white by
+      // default), painted focusedBackground (black by default) at all times and dropped
+      // empty submissions. SDK6 6.x serialises one onTextChanged uuid whose payload carries
+      // value and isSubmit and routes it to onChanged/onTextSubmit itself; older payloads
+      // carry those two uuids directly.
+      const textColor = uiColor(value.placeholderColor)
       const emit = (text: string, submit: boolean) => {
+        if (submit && text === '') return
         if (value.onTextChanged) {
           sendUiEvent(state, value.onTextChanged, { value: { value: text, isSubmit: submit } })
-        } else {
-          const uuid = submit ? value.onTextSubmit : value.onChanged
-          if (uuid) sendUiEvent(state, uuid, submit ? { text } : { value: text })
+          return
         }
+        const uuid = submit ? value.onTextSubmit : value.onChanged
+        if (uuid) sendUiEvent(state, uuid, submit ? { text } : { value: text })
       }
       return (
         <Input
           key={'w' + c.__id}
           uiTransform={uiTransform}
+          uiBackground={{ color: value.focusedBackground ? uiColor(value.focusedBackground) : Color4.Black() }}
           value={value.value ?? ''}
           placeholder={value.placeholder ?? ''}
-          color={value.color}
-          fontSize={value.fontSize ?? 10}
+          color={textColor}
+          placeholderColor={textColor}
+          textAlign={textAlignFromHV(value.hTextAlign, value.vTextAlign)}
+          font={convertUiFontFromFont(convertFont(state, value.font))}
+          fontSize={Math.trunc(value.fontSize ?? 10) * zoom}
           onChange={(text) => {
             if (submittedInputChanges.get(c.__id) === text) return
             const token = {}
@@ -315,10 +333,10 @@ export function Ecs6UiComponent(
     }
 
     default: {
-      const [uiTransform, size] = computeTransform(c.value, parentSize, zoom, stack)
+      const [uiTransform, size] = computeTransform(c.value, parentSize, zoom, stack, blocks)
       return (
         <UiEntity key={'w' + c.__id} uiTransform={uiTransform}>
-          {c.children.map(($) => Ecs6UiComponent(state, $, size, zoom))}
+          {c.children.map(($) => Ecs6UiComponent(state, $, size, zoom, undefined, blocks))}
         </UiEntity>
       )
     }

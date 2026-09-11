@@ -14,6 +14,20 @@ const componentMap = new Map<string, ComponentNode>()
 const sourceValues = new WeakMap<ComponentNode, ECS6ComponentUiShape>()
 let topologyDirty = true
 let roots: ComponentNode[] = []
+const disposedIds = new Set<string>()
+const screenSpaceClassIds = new Set<number>([ECS6_CLASS_ID.UI_SCREEN_SPACE_SHAPE, ECS6_CLASS_ID.UI_FULLSCREEN_SHAPE])
+
+// A child whose parentComponent never became a UI component (a class without a
+// translation, such as UIWorldSpace, or a parent created later) belongs to the
+// scene's first screen-space canvas, as in the legacy renderer's UIShape
+// fallback. Without a canvas it is not rendered. Children of a disposed parent
+// stay hidden until the parent is created again, as the legacy renderer
+// destroyed them with the parent's hierarchy.
+function screenSpaceFallback(): ComponentNode | undefined {
+  for (const component of componentMap.values())
+    if (!component.value.parentComponent && screenSpaceClassIds.has(component.classId)) return component
+  return undefined
+}
 
 function layoutRoot(node: ComponentNode): { id: string; fitted: boolean } | undefined {
   const seen = new Set<string>()
@@ -38,6 +52,7 @@ export function updateComponent(componentId: string, classId: number, value: ECS
   if (previous?.classId === classId && sourceValues.get(previous) === value) return
   const detached = previous && previous.value.parentComponent !== value.parentComponent ? layoutRoot(previous) : undefined
   topologyDirty = true
+  disposedIds.delete(componentId)
   const node = { __id: componentId, classId, value: { ...value }, children: [] }
   sourceValues.set(node, value)
   componentMap.set(componentId, node)
@@ -48,7 +63,10 @@ export function updateComponent(componentId: string, classId: number, value: ECS
 
 export function removeComponent(componentId: string): void {
   const node = componentMap.get(componentId), root = node && layoutRoot(node)
-  if (componentMap.delete(componentId)) topologyDirty = true
+  if (componentMap.delete(componentId)) {
+    disposedIds.add(componentId)
+    topologyDirty = true
+  }
   if (root?.fitted) refreshTextLayouts(root.id)
 }
 
@@ -58,13 +76,14 @@ export function renderEcs6Ui(state: AdaptationLayerState) {
       topologyDirty = false
       roots = []
       for (const component of componentMap.values()) component.children = []
+      const fallback = screenSpaceFallback()
       for (const component of componentMap.values()) {
         const parentId = component.value.parentComponent
         if (!parentId) {
           roots.push(component)
           continue
         }
-        const parent = componentMap.get(parentId)
+        const parent = componentMap.get(parentId) ?? (disposedIds.has(parentId) ? undefined : fallback)
         if (!parent) continue
         const seen = new Set([component.__id])
         let ancestor: ComponentNode | undefined = parent

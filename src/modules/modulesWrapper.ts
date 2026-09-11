@@ -57,25 +57,48 @@ export function getLoadableModuleName(maybeModuleName: string): string | undefin
   return undefined
 }
 
+const NOT_AVAILABLE = 'The module is not available in the list!'
+
+/**
+ * Rejection for a name that is not a host module. The bundle's AMD loader
+ * hands it to the sandbox `onerror`, which keeps it out of the scene log
+ * because the bundle may define that name itself further on.
+ */
+export class ModuleNotAvailableError extends Error {
+  readonly original = new Error(NOT_AVAILABLE)
+
+  constructor(legacyName: string) {
+    super(`Error getting the methods of ${legacyName}: ${NOT_AVAILABLE}`)
+  }
+}
+
+export function isModuleNotAvailableError(error: unknown): error is ModuleNotAvailableError {
+  return error instanceof ModuleNotAvailableError
+}
+
+/** The legacy runtime named `@decentraland/` modules with a `Legacy` prefix in its errors. */
+function legacyModuleName(name: string): string {
+  return name.replace(/^@decentraland\//, 'Legacy').replace(/^~system\//, '')
+}
+
+/**
+ * Resolves a host module or throws, as the legacy runtime did. A bundle's AMD
+ * loader asks the host for every `@`-prefixed dependency and treats the
+ * rejection as "not a host module", keeping the dependants waiting for a
+ * `define` of that name later in the bundle. Resolving with a placeholder
+ * would release them with a still-empty exports object.
+ */
 export function loadWrappedModule(maybeModuleName: string): ModuleDescriptorWithImplementation {
   if (typeof maybeModuleName !== 'string') throw new TypeError('SDK6 module name must be a string')
   const moduleName = getLoadableModuleName(maybeModuleName)
+  if (moduleName === undefined) throw new ModuleNotAvailableError(legacyModuleName(maybeModuleName))
 
-  if (moduleName !== undefined) {
-    if (DEBUG_CONFIG.RPC_MODULE) console.log(`Loading module ${moduleName}`)
+  if (DEBUG_CONFIG.RPC_MODULE) console.log(`Loading module ${moduleName}`)
 
-    const module = LoadableModules[moduleName]()
-    return {
-      methods: getModuleMethods(module),
-      rpcHandle: moduleName,
-      implementation: module
-    }
-  } else {
-    console.error(`Module '${maybeModuleName}' not found, returning empty module`)
-    return {
-      methods: [],
-      rpcHandle: 'empty',
-      implementation: {}
-    }
+  const module = LoadableModules[moduleName]()
+  return {
+    methods: getModuleMethods(module),
+    rpcHandle: moduleName,
+    implementation: module
   }
 }

@@ -156,7 +156,8 @@ export function renderUiScrollRect(
   c: ComponentNode,
   parentSize: Vector2,
   zoom: number,
-  stack?: StackContext
+  stack?: StackContext,
+  blocks = true
 ): JSX.Element {
   const value = c.value as ScrollRectValue
   const [transform, size] = computeTransform(
@@ -169,13 +170,16 @@ export function renderUiScrollRect(
     } as ScrollRectValue,
     parentSize,
     zoom,
-    stack
+    stack,
+    blocks
   )
   const left = Math.max(0, value.paddingLeft ?? 0) * zoom,
     top = Math.max(0, value.paddingTop ?? 0) * zoom
   const width = Math.max(0, size.x * zoom - left - Math.max(0, value.paddingRight ?? 0) * zoom)
   const height = Math.max(0, size.y * zoom - top - Math.max(0, value.paddingBottom ?? 0) * zoom)
-  const children = c.children.map((child) => Ecs6UiComponent(state, child, { x: width / zoom, y: height / zoom }, zoom))
+  const children = c.children.map((child) =>
+    Ecs6UiComponent(state, child, { x: width / zoom, y: height / zoom }, zoom, undefined, blocks)
+  )
   const content = bounds(children, width, height)
   const background = bounds(children, width, height, true)
   const binding = bindings.get(c.__id)!
@@ -209,7 +213,7 @@ export function renderUiScrollRect(
         width,
         height,
         overflow: 'hidden',
-        pointerFilter: 'block'
+        pointerFilter: blocks ? 'block' : 'none'
       }}
       onMouseDown={start('content')}
       onMouseUp={stop}
@@ -247,7 +251,7 @@ export function renderUiScrollRect(
             position: { left: binding.position.x * binding.travel.x, top: Math.max(0, height - 8 * zoom) },
             width: thumbWidth,
             height: 8 * zoom,
-            pointerFilter: 'block'
+            pointerFilter: blocks ? 'block' : 'none'
           }}
           uiBackground={{ color: Color4.create(0.6, 0.6, 0.6, 1) }}
           onMouseDown={start('x')}
@@ -262,7 +266,7 @@ export function renderUiScrollRect(
             position: { left: Math.max(0, width - 8 * zoom), top: (1 - binding.position.y) * binding.travel.y },
             width: 8 * zoom,
             height: thumbHeight,
-            pointerFilter: 'block'
+            pointerFilter: blocks ? 'block' : 'none'
           }}
           uiBackground={{ color: Color4.create(0.6, 0.6, 0.6, 1) }}
           onMouseDown={start('y')}
@@ -271,7 +275,7 @@ export function renderUiScrollRect(
       ) : null}
     </UiEntity>
   )
-  transform.pointerFilter = value.isPointerBlocker === false ? 'none' : 'block'
+  transform.pointerFilter = blocks ? 'block' : 'none'
   const element = UiEntity({ uiTransform: transform })
   return ReactEcs.createElement('entity', { ...element.props, key: 'w' + c.__id, ref: binding.ref } as any, viewport)
 }

@@ -35,15 +35,16 @@ export function renderUiButton(
   c: ComponentNode,
   parentSize: Vector2,
   zoom: number,
-  stack?: StackContext
+  stack?: StackContext,
+  blocks = true
 ): JSX.Element {
   const value = c.value as ButtonValue
-  const [uiTransform, size] = computeTransform(value, parentSize, zoom, stack)
+  const [uiTransform, size] = computeTransform(value, parentSize, zoom, stack, blocks)
   const color = value.color ?? Color4.White()
   uiTransform.borderWidth = Math.max(0, value.thickness ?? 0) * zoom
   uiTransform.borderRadius = Math.max(0, value.cornerRadius ?? 0) * zoom
   uiTransform.borderColor = color
-  const onMouseDown = getClickHandler(state, value.onClick)
+  const onMouseDown = blocks ? getClickHandler(state, value.onClick) : undefined
   const text = value.text ?? 'button'
   const label = {
     value: value.fontWeight === 'bold' ? `<b>${text}</b>` : text,
@@ -87,7 +88,7 @@ export function renderUiButton(
         }}
         uiText={label}
       />
-      {c.children.map((child) => Ecs6UiComponent(state, child, size, zoom))}
+      {c.children.map((child) => Ecs6UiComponent(state, child, size, zoom, undefined, blocks))}
     </UiEntity>
   )
 }
